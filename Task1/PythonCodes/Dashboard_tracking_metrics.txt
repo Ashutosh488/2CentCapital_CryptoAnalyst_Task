@@ -1,0 +1,136 @@
+import dash
+from dash import dcc, html, Input, Output
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+
+# Sample portfolio data: assets, initial allocation ($), and asset type
+portfolio_data = {
+    'Asset': ['BTC', 'ETH', 'AAVE', 'USDC'],
+    'Initial Allocation': [400000, 300000, 200000, 100000],
+    'Type': ['Crypto', 'Crypto', 'DeFi', 'Stablecoin'],
+    'APR': [0.05, 0.07, 0.12, 0.02],
+    'Beta': [1.0, 1.2, 1.5, 0.1],
+    'Volatility': [0.6, 0.75, 0.9, 0.05]  # Hypothetical volatilities for example
+}
+
+# Create DataFrame
+portfolio_df = pd.DataFrame(portfolio_data)
+portfolio_df['Current Price'] = [50000, 3000, 150, 1]
+portfolio_df['Quantity'] = portfolio_df['Initial Allocation'] / portfolio_df['Current Price']
+portfolio_df['APY'] = (1 + portfolio_df['APR']) ** 12 - 1  # Approximate APY from APR
+
+# Define Dash app
+app = dash.Dash(__name__)
+
+# Layout for the dashboard
+app.layout = html.Div([
+    html.H1("Crypto Portfolio Dashboard"),
+
+    # Display key metrics
+    html.Div([
+        html.H3("Key Metrics"),
+        html.Div(id='portfolio-metrics')
+    ]),
+
+    # Graph for Portfolio Allocation
+    dcc.Graph(id='portfolio-allocation'),
+
+    # Stress Test Controls
+    html.Div([
+        html.H3("Stress Test Simulation"),
+        html.Label("BTC Drop (%)"),
+        dcc.Slider(id='btc-drop', min=0, max=1, step=0.05, value=0.3),
+        html.Label("ETH Drop (%)"),
+        dcc.Slider(id='eth-drop', min=0, max=1, step=0.05, value=0.3),
+        html.Label("DeFi Drop (%)"),
+        dcc.Slider(id='defi-drop', min=0, max=1, step=0.05, value=0.5),
+        html.Label("Stablecoin Drop (%)"),
+        dcc.Slider(id='stablecoin-drop', min=0, max=1, step=0.05, value=0.2),
+    ], style={'width': '40%', 'display': 'inline-block', 'padding': '10px'}),
+
+    # Graph for Stress Test Outcome
+    dcc.Graph(id='stress-test-outcome')
+])
+
+# Callback to display portfolio metrics
+@app.callback(
+    Output('portfolio-metrics', 'children'),
+    Input('btc-drop', 'value'),
+    Input('eth-drop', 'value'),
+    Input('defi-drop', 'value'),
+    Input('stablecoin-drop', 'value')
+)
+def update_portfolio_metrics(btc_drop, eth_drop, defi_drop, stablecoin_drop):
+    total_initial = portfolio_df['Initial Allocation'].sum()
+    avg_apr = (portfolio_df['APR'] * portfolio_df['Initial Allocation']).sum() / total_initial
+    avg_apy = (portfolio_df['APY'] * portfolio_df['Initial Allocation']).sum() / total_initial
+    avg_beta = (portfolio_df['Beta'] * portfolio_df['Initial Allocation']).sum() / total_initial
+    avg_volatility = (portfolio_df['Volatility'] * portfolio_df['Initial Allocation']).sum() / total_initial
+
+    return [
+        html.P(f"Total Portfolio Value: ${total_initial:,.2f}"),
+        html.P(f"Average APR: {avg_apr:.2%}"),
+        html.P(f"Average APY: {avg_apy:.2%}"),
+        html.P(f"Average Beta: {avg_beta:.2f}"),
+        html.P(f"Average Volatility: {avg_volatility:.2%}")
+    ]
+
+# Callback for portfolio allocation chart
+@app.callback(
+    Output('portfolio-allocation', 'figure'),
+    Input('btc-drop', 'value'),
+    Input('eth-drop', 'value'),
+    Input('defi-drop', 'value'),
+    Input('stablecoin-drop', 'value')
+)
+def update_allocation_chart(btc_drop, eth_drop, defi_drop, stablecoin_drop):
+    fig = go.Figure(data=[go.Pie(labels=portfolio_df['Asset'], values=portfolio_df['Initial Allocation'], hole=.3)])
+    fig.update_layout(title="Portfolio Allocation")
+    return fig
+
+# Callback for stress test outcome chart
+@app.callback(
+    Output('stress-test-outcome', 'figure'),
+    Input('btc-drop', 'value'),
+    Input('eth-drop', 'value'),
+    Input('defi-drop', 'value'),
+    Input('stablecoin-drop', 'value')
+)
+def update_stress_test_chart(btc_drop, eth_drop, defi_drop, stablecoin_drop):
+    stress_df = portfolio_df.copy()
+    stress_df['Price After Stress'] = stress_df.apply(
+        lambda row: row['Current Price'] * (1 - btc_drop) if row['Asset'] == 'BTC' else
+                    row['Current Price'] * (1 - eth_drop) if row['Asset'] == 'ETH' else
+                    row['Current Price'] * (1 - defi_drop) if row['Type'] == 'DeFi' else
+                    row['Current Price'] * (1 - stablecoin_drop) if row['Type'] == 'Stablecoin' else
+                    row['Current Price'],
+        axis=1
+    )
+    stress_df['Value After Stress'] = stress_df['Quantity'] * stress_df['Price After Stress']
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=stress_df['Asset'],
+        y=portfolio_df['Initial Allocation'],
+        name='Initial Allocation',
+        marker_color='blue'
+    ))
+    fig.add_trace(go.Bar(
+        x=stress_df['Asset'],
+        y=stress_df['Value After Stress'],
+        name='After Stress Test',
+        marker_color='red'
+    ))
+    
+    fig.update_layout(
+        title='Portfolio Allocation Before and After Stress Test',
+        xaxis_title='Asset',
+        yaxis_title='Value ($)',
+        barmode='group'
+    )
+    return fig
+
+# Run the app
+if __name__ == '__main__':
+    app.run_server(debug=True)

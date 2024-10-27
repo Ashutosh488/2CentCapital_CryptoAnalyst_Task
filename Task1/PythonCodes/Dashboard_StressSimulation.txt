@@ -1,0 +1,82 @@
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+
+# Sample portfolio data: asset names, initial allocation ($), and asset types
+portfolio_data = {
+    'Asset': ['BTC', 'ETH', 'AAVE', 'USDC'],
+    'Initial Allocation': [400000, 300000, 200000, 100000],
+    'Type': ['Crypto', 'Crypto', 'DeFi', 'Stablecoin']
+}
+
+# Create DataFrame
+portfolio_df = pd.DataFrame(portfolio_data)
+
+# Define current prices for each asset (to be updated with real-time data if needed)
+portfolio_df['Current Price'] = [50000, 3000, 150, 1]  # Example prices
+portfolio_df['Quantity'] = portfolio_df['Initial Allocation'] / portfolio_df['Current Price']
+
+# Scenario simulation function
+def simulate_stress_test(df, btc_drop=0.3, eth_drop=0.3, defi_drop=0.5, stablecoin_drop=0.2):
+    # Make a copy of the original DataFrame
+    df = df.copy()
+    
+    # Apply price drops based on asset type
+    df['Price After Stress'] = df.apply(
+        lambda row: row['Current Price'] * (1 - btc_drop) if row['Asset'] == 'BTC' else
+                    row['Current Price'] * (1 - eth_drop) if row['Asset'] == 'ETH' else
+                    row['Current Price'] * (1 - defi_drop) if row['Type'] == 'DeFi' else
+                    row['Current Price'] * (1 - stablecoin_drop) if row['Type'] == 'Stablecoin' else
+                    row['Current Price'],
+        axis=1
+    )
+    
+    # Calculate new allocation after the stress test
+    df['Value After Stress'] = df['Quantity'] * df['Price After Stress']
+    
+    # Calculate portfolio total values before and after stress
+    initial_total = df['Initial Allocation'].sum()
+    stress_total = df['Value After Stress'].sum()
+    loss_percentage = (initial_total - stress_total) / initial_total * 100
+    
+    return df, initial_total, stress_total, loss_percentage
+
+# Run stress test simulation
+stress_results, initial_value, stressed_value, loss_pct = simulate_stress_test(
+    portfolio_df, btc_drop=0.3, eth_drop=0.3, defi_drop=0.5, stablecoin_drop=0.2
+)
+
+# Display results
+print("Portfolio Value Before Stress Test: $", initial_value)
+print("Portfolio Value After Stress Test: $", stressed_value)
+print("Percentage Loss: ", loss_pct, "%")
+
+# Plotting with Plotly
+fig = go.Figure()
+
+# Initial Portfolio Allocation
+fig.add_trace(go.Bar(
+    x=portfolio_df['Asset'],
+    y=portfolio_df['Initial Allocation'],
+    name='Initial Allocation',
+    marker_color='blue'
+))
+
+# Portfolio Allocation After Stress Test
+fig.add_trace(go.Bar(
+    x=stress_results['Asset'],
+    y=stress_results['Value After Stress'],
+    name='After Stress Test',
+    marker_color='red'
+))
+
+# Layout
+fig.update_layout(
+    title='Portfolio Allocation Before and After Stress Test',
+    xaxis_title='Asset',
+    yaxis_title='Value ($)',
+    barmode='group'
+)
+
+# Show the plot
+fig.show()
